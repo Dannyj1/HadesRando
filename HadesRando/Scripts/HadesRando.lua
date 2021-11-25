@@ -133,28 +133,6 @@ function isBiomeBlacklisted(biome)
     return false
 end
 
---[[local doDebugStuff = true
-local oAttemptUseDoor = AttemptUseDoor
-function AttemptUseDoor( door )
-    if doDebugStuff == true then
-        ForceNextRoom = "B_Boss01"
-
-        -- Stomp any rooms already assigned to doors
-        for doorId, door in pairs( OfferedExitDoors ) do
-            local room = door.Room
-            if room ~= nil then
-                local forcedRoomData = RoomData[ForceNextRoom]
-                local forcedRoom = CreateRoom( forcedRoomData )
-                AssignRoomToExitDoor( door, forcedRoom )
-            end
-        end
-
-        doDebugStuff = false
-    end
-
-    oAttemptUseDoor(door)
-end]]
-
 local oLeaveRoom = LeaveRoom
 function LeaveRoom(currentRun, door)
     oLeaveRoom(currentRun, door)
@@ -364,7 +342,7 @@ function randomizeRooms()
     local roomAmount = config.fixedRoomAmount
 
     if config.randomRoomAmount then
-        roomAmount = math.random(30, 60)
+        roomAmount = math.random(25, 50)
     end
 
     local roomsCopy = DeepCopyTable(rooms)
@@ -372,9 +350,8 @@ function randomizeRooms()
     local shopRooms = { "A_Shop01", "B_Shop01", "C_Shop01" }
     local erebusRooms = { "RoomChallenge01", "RoomChallenge02", "RoomChallenge03", "RoomChallenge04" }
     local furiesIndex = math.random(7, math.ceil(roomAmount * 0.4))
-    local lernieIndex = math.random(furiesIndex + 1, math.ceil(roomAmount * 0.7))
-    local championsIndex = math.random(lernieIndex + 1, roomAmount - 1)
-    local styxIndex = roomAmount
+    local lernieIndex = math.random(furiesIndex + 1, math.ceil(roomAmount * 0.8))
+    local championsIndex = roomAmount
     local erebusChance = math.random(100)
     local charonFightChance = math.random(100)
 
@@ -382,7 +359,6 @@ function randomizeRooms()
     insertRandomRoom(furiesIndex, "A_PreBoss01")
     insertRandomRoom(lernieIndex, "B_PreBoss01")
     insertRandomRoom(championsIndex, "C_PreBoss01")
-    insertRandomRoom(styxIndex, "C_PostBoss01")
     insertRandomRoomAtFreeIndex(npcRooms[math.random(#npcRooms)], roomAmount)
     insertRandomRoomAtFreeIndex(shopRooms[math.random(#shopRooms)], roomAmount)
     insertRandomRoomAtFreeIndex(shopRooms[math.random(#shopRooms)], roomAmount)
