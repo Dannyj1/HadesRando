@@ -1,2 +1,2 @@
-:: HadesRando v1.0.0
+:: HadesRando v1.1.0
 Import "Scripts"

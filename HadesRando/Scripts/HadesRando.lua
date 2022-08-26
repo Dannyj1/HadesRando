@@ -1,5 +1,5 @@
 --[[
-Copyright 2021 Dannyj1
+Copyright 2022 Dannyj1
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
@@ -10,17 +10,23 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ModUtil.RegisterMod("HadesRando")
 
-local config = {
-    seed = nil,
-    randomizeEnemies = true,
-    randomizeBoons = true,
-    randomizeKeepsakes = true,
-    randomizeCompanions = true,
-    randomizeWeapons = true,
-    randomizeRooms = true,
-    randomRoomAmount = false,
-    fixedRoomAmount = 40
+HadesRando = {
+    config = {
+        seed = nil,
+        randomizeEnemies = true,
+        randomizeBoons = true,
+        randomizeKeepsakes = false,
+        randomizeCompanions = false,
+        randomizeWeapons = false,
+        randomizeRooms = true,
+        randomRoomAmount = false,
+        scaleStats = true,
+        fixedRoomAmount = 40,
+        charonEncounterChance = 3,
+        erebusEncounterChance = 20
+    }
 }
+
 
 local keepsakes = {
     "MaxHealthKeepsakeTrait", -- cerberus
@@ -59,16 +65,28 @@ local companions = {
     "AchillesPatroclusAssistTrait"
 }
 
+local roomDataCopy
+local encounterDataCopy
+local enemyDataCopy
+local lootData
+
 local enemies = {}
 local minibosses = {}
 local rooms = {}
+local originalEnemyHealth = {}
+local originalEnemyDifficulty = {}
 local randomRooms
 local roomSets = { RoomSetData.Tartarus, RoomSetData.Asphodel, RoomSetData.Elysium, RoomSetData.Secrets }
 local roomCounter = 1
-HadesRando.config = config
 local seedText = "Seed: "
+local rngId = 2
 
 ModUtil.LoadOnce( function()
+    roomDataCopy = DeepCopyTable(RoomData)
+    encounterDataCopy = DeepCopyTable(EncounterData)
+    enemyDataCopy = DeepCopyTable(EnemyData)
+    lootData = DeepCopyTable(LootData)
+
     for biome, enemySet in pairs(EnemySets) do
         if not isBiomeBlacklisted(biome) then
             for i, enemy in ipairs(enemySet) do
@@ -96,7 +114,7 @@ ModUtil.LoadOnce( function()
 end)
 
 function isRoomBlacklisted(roomName)
-    local patterns = { "intro", "base", "generated", "boss", "reprieve", "roomopening", "simpleroom"}
+    local patterns = { "intro", "base", "generated", "boss", "reprieve", "roomopening", "simpleroom", "a_combat25"}
     roomName = string.lower(roomName)
 
     if roomName == "RoomSimple01" and roomName == "RoomOpening" then
@@ -138,8 +156,9 @@ function LeaveRoom(currentRun, door)
     oLeaveRoom(currentRun, door)
 
     if string.match(door.Room.Name, "PostBoss") then
-        if config.randomizeKeepsakes then
-            local keepsake = keepsakes[math.random(#keepsakes)]
+        if HadesRando.config.randomizeKeepsakes then
+            assert(HadesRando.config.seed ~= nil, "Tried to get a random number while the seed was nil")
+            local keepsake = keepsakes[GetRngById(rngId):Random(#keepsakes)]
             assert(keepsake)
 
             UnequipKeepsake(CurrentRun.Hero, GameState.LastAwardTrait)
@@ -147,8 +166,9 @@ function LeaveRoom(currentRun, door)
             EquipKeepsake(CurrentRun.Hero, GameState.LastAwardTrait)
         end
 
-        if config.randomizeCompanions then
-            local companion = companions[math.random(#companions)]
+        if HadesRando.config.randomizeCompanions then
+            assert(HadesRando.config.seed ~= nil, "Tried to get a random number while the seed was nil")
+            local companion = companions[GetRngById(rngId):Random(#companions)]
             assert(companion)
 
             UnequipAssist(CurrentRun.Hero, GameState.LastAssistTrait)
@@ -156,21 +176,20 @@ function LeaveRoom(currentRun, door)
             EquipAssist(CurrentRun.Hero, GameState.LastAssistTrait)
         end
 
-        if config.randomizeCompanions and config.randomizeKeepsakes then
+        if HadesRando.config.randomizeCompanions and HadesRando.config.randomizeKeepsakes then
             door.Room.BlockKeepsakeMenu = true
         end
     end
 end
 
-local roomDataCopy = DeepCopyTable(RoomData)
-local encounterDataCopy = DeepCopyTable(EncounterData)
-local lootData = DeepCopyTable(LootData)
-OnAnyLoad{ "DeathArea",
+
+OnAnyLoad{ "DeathArea DeathAreaBedroom DeathAreaBedroomHades DeathAreaOffice RoomPreRun",
         function(triggerArgs)
             RoomData = DeepCopyTable(roomDataCopy)
             EncounterData = DeepCopyTable(encounterDataCopy)
             LootData = DeepCopyTable(lootData)
-            config.seed = nil
+            EnemyData = DeepCopyTable(enemyDataCopy)
+            HadesRando.config.seed = nil
         end
 }
 
@@ -179,68 +198,217 @@ function StartOver()
     EncounterData.MiniBossSpreadShot.SpawnWaves[1].Spawns[1].TotalCount = 2
     EncounterData.MiniBossSpreadShot.SpawnWaves[1].Spawns[1].SpawnOnIds = { 548132, 547901 }
 
-    if config.seed == nil then
+    if HadesRando.config.seed == nil then
         seedText = "Seed: "
     else
         seedText = "Set Seed: "
     end
 
-    if config.randomizeBoons then
-        setSeed()
+    setSeed()
+
+    if HadesRando.config.randomizeBoons then
         randomizeLootTables()
     end
 
-    if config.randomizeEnemies then
-        setSeed()
+    if HadesRando.config.randomizeEnemies then
         randomizeEnemies()
     end
 
-    if config.randomizeRooms then
-        setSeed()
+    if HadesRando.config.randomizeRooms then
         randomizeRooms()
     end
 
-    ModUtil.Print(seedText .. config.seed)
+    -- ModUtil.Print(seedText .. HadesRando.config.seed)
 
-    setSeed()
-    if config.randomizeKeepsakes then
-        local keepsake = keepsakes[math.random(#keepsakes)]
+    if HadesRando.config.randomizeKeepsakes then
+        assert(HadesRando.config.seed ~= nil, "Tried to get a random number while the seed was nil")
+        local keepsake = keepsakes[GetRngById(rngId):Random(#keepsakes)]
         assert(keepsake)
-        ModUtil.Print("Keepsake: " .. keepsake)
+        -- ModUtil.Print("Keepsake: " .. keepsake)
         GameState.LastAwardTrait = keepsake
     end
 
-    if config.randomizeCompanions then
-        local companion = companions[math.random(#companions)]
+    if HadesRando.config.randomizeCompanions then
+        assert(HadesRando.config.seed ~= nil, "Tried to get a random number while the seed was nil")
+        local companion = companions[GetRngById(rngId):Random(#companions)]
         assert(companion)
-        ModUtil.Print("Companion: " .. companion)
+        -- ModUtil.Print("Companion: " .. companion)
         GameState.LastAssistTrait = companion
     end
-    
-    if config.randomizeWeapons then
-        local weaponName = WeaponSets.HeroMeleeWeapons[math.random(#WeaponSets.HeroMeleeWeapons)]
+
+    if HadesRando.config.randomizeWeapons then
+        assert(HadesRando.config.seed ~= nil, "Tried to get a random number while the seed was nil")
+        local weaponName = WeaponSets.HeroMeleeWeapons[GetRngById(rngId):Random(#WeaponSets.HeroMeleeWeapons)]
         assert(weaponName)
         local weaponData = WeaponData[weaponName]
         assert(weaponData)
 
-        GameState.LastWeaponUpgradeData[weaponName] = { Index = math.random(#WeaponUpgradeData[weaponName]) }
+        GameState.LastWeaponUpgradeData[weaponName] = { Index = GetRngById(rngId):Random(#WeaponUpgradeData[weaponName]) }
         EquipPlayerWeapon(weaponData)
         EquipWeaponUpgrade(CurrentRun.Hero)
-        ModUtil.Print("Weapon: " .. weaponName)
-        ModUtil.Print("Weapon Aspect Index: " .. GameState.LastWeaponUpgradeData[weaponName].Index)
+        -- ModUtil.Print("Weapon: " .. weaponName)
+        -- ModUtil.Print("Weapon Aspect Index: " .. GameState.LastWeaponUpgradeData[weaponName].Index)
     end
 
-    -- MetaUpgradeData.lua - mirror stuff
-    -- Implement random sounds and text lines
-    -- Look into some waves immediately ending
+    if HadesRando.config.scaleStats and (HadesRando.config.randomizeRooms or HadesRando.config.randomizeEnemies) then
+        scaleHealth()
+    end
+
+    --[[ TODO:
+     MetaUpgradeData.lua - mirror stuff
+     Implement random sounds and text lines
+     Look into some waves immediately ending
+     Check if stats of keepsakes etc can be randomized
+     ]]
     oStartOver()
 
-    WeaponData.HadesInvisibility.AIData.PreAttackSound = "/VO/Skelly_0509"
+    -- WeaponData.HadesInvisibility.AIData.PreAttackSound = "/VO/Skelly_0509"
+end
+
+function scaleDifficultyRating(room)
+    local minDifficultyRating = 0
+
+    if room.startsWith("A_") then
+        minDifficultyRating = 0
+    elseif room.startsWith("B_") then
+        minDifficultyRating = 5
+    elseif room.startsWith("C_") then
+        minDifficultyRating = 15
+    elseif room.startsWith("D_") or string.find(room, "Secret") then
+        minDifficultyRating = 20
+    end
+
+    if #originalEnemyDifficulty == 0 then
+        for _, enemy in ipairs(EnemyData) do
+            table.insert(originalEnemyDifficulty, enemy["DifficultyRating"])
+        end
+    end
+
+    for enemyName, enemy in pairs(EnemyData) do
+        local baseEnemyName = enemyName
+
+        if enemy["InheritFrom"] ~= nil and #enemy["InheritFrom"] > 0 and not tableContains(EnemyData[enemyName], "DifficultyRating") then
+            for _, inheritName in pairs(enemy["InheritFrom"]) do
+                if tableContains(EnemyData[inheritName], "DifficultyRating") then
+                    baseEnemyName = inheritName
+                end
+            end
+        end
+
+        local originalDifficulty = originalEnemyDifficulty[enemyName]
+        local generatorData = enemy["GeneratorData"]
+
+        if generatorData ~= nil and originalDifficulty ~= nil then
+            local difficultyRating = generatorData["DifficultyRating"]
+
+            if difficultyRating ~= nil then
+                EnemyData["GeneratorData"]["DifficultyRating"] = math.max(originalDifficulty, minDifficultyRating)
+            end
+        end
+    end
+end
+
+local minibossNames = {"WretchAssassinMiniboss", "ThiefImpulseMineLayerMiniboss", "SpreadShotUnitMiniboss", "HeavyRangedForkedMiniboss", "HeavyRangedSplitterMiniboss", "ShieldRangedMiniBoss", "SatyrRangedMiniboss", "CrawlerMiniBoss", "RatThugMiniboss"}
+local bossNames = {"Harpy", "Harpy2", "Harpy3", "HydraHeadImmortal", "Theseus", "Theseus2", "Minotaur", "Minotaur2", ""}
+function scaleHealth()
+    -- TODO: give bosses a different scale floor as well. Have a list of minibosses and bosses, and apply scaling based on that. Any enemy not in these lists is a normal enemy.
+    -- TODO: also have a list of bosses to always exclude.
+    -- TODO: also ignore enemies with 1 hp.
+    local minHealth = 0
+    local maxHealth = 0
+    local bossMinHealth = 0
+    local bossMaxHealth = 0
+    local minibossMinHealth = 0
+    local minibossMaxHealth = 0
+
+    -- TODO: tweak these values
+    if roomCounter <= 10 then
+        minHealth = 30
+        maxHealth = 250
+        bossMinHealth = 4400
+        bossMaxHealth = 5200
+        minibossMinHealth = 500
+        minibossMaxHealth = 900
+    elseif roomCounter <= 20 then
+        minHealth = 40
+        maxHealth = 600
+        bossMinHealth = 5000
+        bossMaxHealth = 6000
+        minibossMinHealth = 150
+        minibossMaxHealth = 1500
+    elseif roomCounter <= 30 then
+        minHealth = 60
+        maxHealth = 1300
+        bossMinHealth = 9000
+        bossMaxHealth = 14000
+        minibossMinHealth = 2000
+        minibossMaxHealth = 14000
+    else
+        -- From here on no more max scaling
+        minHealth = 120
+        maxHealth = 999999999
+        -- No boss scaling either
+        bossMinHealth = 0
+        bossMaxHealth = 99999999
+        minibossMinHealth = 3000
+        minibossMaxHealth = 999999999
+    end
+
+    if #originalEnemyHealth == 0 then
+        for enemyName, enemy in pairs(EnemyData) do
+            originalEnemyHealth[enemyName] = enemy["MaxHealth"]
+        end
+    end
+
+    -- TODO: maybe scale differently depending on the value of originalHealth
+    for enemyName, enemy in pairs(EnemyData) do
+        local baseEnemyName = enemyName
+
+        if enemy["InheritFrom"] ~= nil and #enemy["InheritFrom"] > 0 and not tableContains(EnemyData[enemyName], "MaxHealth") then
+            for _, inheritName in pairs(enemy["InheritFrom"]) do
+                if tableContains(EnemyData[inheritName], "MaxHealth") then
+                    baseEnemyName = inheritName
+                end
+            end
+        end
+
+        local originalHealth = originalEnemyHealth[baseEnemyName]
+
+        if originalHealth == nil then goto continue end
+
+        if tableContains(bossNames, enemyName) then
+            if originalHealth < bossMinHealth then
+                EnemyData[enemyName]["MaxHealth"] = bossMinHealth
+            elseif originalHealth > bossMaxHealth then
+                EnemyData[enemyName]["MaxHealth"] = bossMaxHealth
+            else
+                EnemyData[enemyName]["MaxHealth"] = originalHealth
+            end
+        elseif tableContains(minibossNames, enemyName) then
+            if originalHealth < minibossMinHealth then
+                EnemyData[enemyName]["MaxHealth"] = minibossMinHealth
+            elseif originalHealth > minibossMaxHealth then
+                EnemyData[enemyName]["MaxHealth"] = minibossMaxHealth
+            else
+                EnemyData[enemyName]["MaxHealth"] = originalHealth
+            end
+        else
+            if originalHealth < minHealth then
+                EnemyData[enemyName]["MaxHealth"] = minHealth
+            elseif originalHealth > maxHealth then
+                EnemyData[enemyName]["MaxHealth"] = maxHealth
+            else
+                EnemyData[enemyName]["MaxHealth"] = originalHealth
+            end
+        end
+
+        ::continue::
+    end
 end
 
 local oDoUnlockRoomExits = DoUnlockRoomExits
 function DoUnlockRoomExits( run, room )
-    if config.randomizeRooms and randomRooms ~= nil and #randomRooms > 0 then
+    if HadesRando.config.randomizeRooms and randomRooms ~= nil and #randomRooms > 0 then
         local currentRoomName = CurrentRun.CurrentRoom.Name
 
         if not (string.match(currentRoomName, "Boss") and not (string.match(currentRoomName, "MiniBoss")
@@ -250,6 +418,12 @@ function DoUnlockRoomExits( run, room )
             local nextRoom = randomRooms[roomCounter]
             roomCounter = roomCounter + 1
             assert(nextRoom)
+
+            if HadesRando.config.scaleStats and (HadesRando.config.randomizeRooms or HadesRando.config.randomizeEnemies) then
+                scaleHealth()
+            end
+
+            scaleDifficultyRating(nextRoom)
 
             if nextRoom == "CharonFight01" then
                 teleportToCharonFight()
@@ -339,35 +513,38 @@ end
 
 function randomizeRooms()
     randomRooms = {}
-    local roomAmount = config.fixedRoomAmount
+    local roomAmount = HadesRando.config.fixedRoomAmount
 
-    if config.randomRoomAmount then
-        roomAmount = math.random(25, 50)
+    if HadesRando.config.randomRoomAmount then
+        assert(HadesRando.config.seed ~= nil, "Tried to get a random number while the seed was nil")
+        roomAmount = GetRngById(rngId):Random(25, 50)
     end
 
+    assert(HadesRando.config.seed ~= nil, "Tried to get a random number while the seed was nil")
     local roomsCopy = DeepCopyTable(rooms)
     local npcRooms = { "A_Story01", "B_Story01", "C_Story01" }
     local shopRooms = { "A_Shop01", "B_Shop01", "C_Shop01" }
     local erebusRooms = { "RoomChallenge01", "RoomChallenge02", "RoomChallenge03", "RoomChallenge04" }
-    local furiesIndex = math.random(7, math.ceil(roomAmount * 0.4))
-    local lernieIndex = math.random(furiesIndex + 1, math.ceil(roomAmount * 0.8))
+    local bossPreRooms = { "A_PreBoss01", "B_PreBoss01", "C_PreBoss01"}
+    local furiesIndex = GetRngById(rngId):Random(math.floor(roomAmount * 0.175), math.ceil(roomAmount * 0.4))
+    local lernieIndex = GetRngById(rngId):Random(furiesIndex + 1, math.ceil(roomAmount * 0.8))
     local championsIndex = roomAmount
-    local erebusChance = math.random(100)
-    local charonFightChance = math.random(100)
+    local erebusChance = GetRngById(rngId):Random(100)
+    local charonFightChance = GetRngById(rngId):Random(100)
 
     prepareRoomsets()
-    insertRandomRoom(furiesIndex, "A_PreBoss01")
-    insertRandomRoom(lernieIndex, "B_PreBoss01")
-    insertRandomRoom(championsIndex, "C_PreBoss01")
-    insertRandomRoomAtFreeIndex(npcRooms[math.random(#npcRooms)], roomAmount)
-    insertRandomRoomAtFreeIndex(shopRooms[math.random(#shopRooms)], roomAmount)
-    insertRandomRoomAtFreeIndex(shopRooms[math.random(#shopRooms)], roomAmount)
+    insertRandomRoom(furiesIndex, bossPreRooms[1])
+    insertRandomRoom(lernieIndex, bossPreRooms[2])
+    insertRandomRoom(championsIndex, bossPreRooms[3])
+    insertRandomRoomAtFreeIndex(npcRooms[GetRngById(rngId):Random(#npcRooms)], roomAmount)
+    insertRandomRoomAtFreeIndex(shopRooms[GetRngById(rngId):Random(#shopRooms)], roomAmount)
+    insertRandomRoomAtFreeIndex(shopRooms[GetRngById(rngId):Random(#shopRooms)], roomAmount)
 
-    if erebusChance <= 20 then
-        insertRandomRoomAtFreeIndex(erebusRooms[math.random(#erebusRooms)], roomAmount)
+    if erebusChance <= HadesRando.config.erebusEncounterChance then
+        insertRandomRoomAtFreeIndex(erebusRooms[GetRngById(rngId):Random(#erebusRooms)], roomAmount)
     end
 
-    if charonFightChance <= 3 then
+    if charonFightChance <= HadesRando.config.charonEncounterChance then
         insertRandomRoomAtFreeIndex("CharonFight01", roomAmount, math.ceil(roomAmount * 0.5))
     end
 
@@ -378,7 +555,7 @@ function randomizeRooms()
                 assert(#roomsCopy == 0)
             end
 
-            local randomIndex = math.random(#roomsCopy)
+            local randomIndex = GetRngById(rngId):Random(#roomsCopy)
             local randomRoom = roomsCopy[randomIndex]
             local attempts = 0
 
@@ -387,7 +564,7 @@ function randomizeRooms()
                     roomsCopy = DeepCopyTable(rooms)
                 end
 
-                randomIndex = math.random(#roomsCopy)
+                randomIndex = GetRngById(rngId):Random(#roomsCopy)
                 randomRoom = roomsCopy[randomIndex]
                 attempts = attempts + 1
             end
@@ -429,7 +606,7 @@ function insertRandomRoom(index, roomName, allowOverwrite)
         assert(not randomRoomExistsAtIndex(index))
     end
 
-    assert(roomName)
+    assert(roomName ~= nil)
     assert(index >= 1)
     randomRooms[index] = roomName
     ModUtil.Print("Rooms: " .. index .. " >> " .. roomName)
@@ -440,10 +617,11 @@ function insertRandomRoomAtFreeIndex(roomName, roomAmount, minimumIndex)
         minimumIndex = 1
     end
 
-    local index = math.random(minimumIndex, roomAmount)
+    assert(HadesRando.config.seed ~= nil, "Tried to get a random number while the seed was nil")
+    local index = GetRngById(rngId):Random(minimumIndex, roomAmount)
 
     while randomRoomExistsAtIndex(index) do
-        index = math.random(minimumIndex, roomAmount)
+        index = GetRngById(rngId):Random(minimumIndex, roomAmount)
     end
 
     insertRandomRoom(index, roomName, false)
@@ -517,6 +695,7 @@ function randomizeLootTables()
         end
     end
 
+    assert(HadesRando.config.seed ~= nil, "Tried to get a random number while the seed was nil")
     local weaponUpgradesCopy = DeepCopyTable(weaponUpgrades)
     for k, v in pairs(weaponUpgradeCounts) do
         if v > 0 then
@@ -525,13 +704,13 @@ function randomizeLootTables()
                     weaponUpgradesCopy = DeepCopyTable(weaponUpgrades)
                 end
 
-                local randomIndex = math.random(#weaponUpgradesCopy)
+                local randomIndex = GetRngById(rngId):Random(#weaponUpgradesCopy)
                 local randomTrait = weaponUpgradesCopy[randomIndex]
 
                 table.remove(weaponUpgradesCopy, randomIndex)
                 assert(randomTrait)
                 table.insert(LootData[k].WeaponUpgrades, randomTrait)
-                ModUtil.Print("WeaponUpgrades: " .. k .. " >> " .. randomTrait)
+                -- ModUtil.Print("WeaponUpgrades: " .. k .. " >> " .. randomTrait)
             end
         end
     end
@@ -544,13 +723,13 @@ function randomizeLootTables()
                     traitsCopy = DeepCopyTable(traits)
                 end
 
-                local randomIndex = math.random(#traitsCopy)
+                local randomIndex = GetRngById(rngId):Random(#traitsCopy)
                 local randomTrait = traitsCopy[randomIndex]
 
                 table.remove(traitsCopy, randomIndex)
                 assert(randomTrait)
                 table.insert(LootData[k].Traits, randomTrait)
-                ModUtil.Print("Traits: " .. k .. " >> " .. randomTrait)
+                -- ModUtil.Print("Traits: " .. k .. " >> " .. randomTrait)
             end
         end
     end
@@ -563,13 +742,13 @@ function randomizeLootTables()
                     consumablesCopy = DeepCopyTable(consumables)
                 end
 
-                local randomIndex = math.random(#consumablesCopy)
+                local randomIndex = GetRngById(rngId):Random(#consumablesCopy)
                 local randomTrait = consumablesCopy[randomIndex]
 
                 table.remove(consumablesCopy, randomIndex)
                 assert(randomTrait)
                 table.insert(LootData[k].Consumables, randomTrait)
-                ModUtil.Print("Consumables: " .. k .. " >> " .. randomTrait)
+                -- ModUtil.Print("Consumables: " .. k .. " >> " .. randomTrait)
             end
         end
     end
@@ -582,13 +761,13 @@ function randomizeLootTables()
                     linkedUpgradesCopy = DeepCopyTable(linkedUpgrades)
                 end
 
-                local randomIndex = math.random(#linkedUpgradesCopy)
+                local randomIndex = GetRngById(rngId):Random(#linkedUpgradesCopy)
                 local randomTrait = linkedUpgradesCopy[randomIndex]
 
                 table.remove(linkedUpgradesCopy, randomIndex)
                 assert(randomTrait)
                 table.insert(LootData[k].LinkedUpgrades, randomTrait)
-                ModUtil.Print("LinkedUpgrades: " .. k .. " >> " .. randomTrait)
+                -- ModUtil.Print("LinkedUpgrades: " .. k .. " >> " .. randomTrait)
             end
         end
     end
@@ -597,6 +776,7 @@ end
 function randomizeEnemies()
     local enemiesCopy = DeepCopyTable(enemies)
 
+    assert(HadesRando.config.seed ~= nil, "Tried to get a random number while the seed was nil")
     for biome, v in pairs(EncounterData) do
         if EncounterData[biome].EnemySet ~= nil or EncounterData[biome].ManualWaveTemplates ~= nil or EncounterData[biome].WaveTemplate ~= nil or EncounterData[biome].SpawnWaves ~= nil then
             if not isBiomeBlacklisted(biome) and not string.match(biome, "Story") and not string.match(biome, "Shop") then
@@ -605,7 +785,7 @@ function randomizeEnemies()
                 EncounterData[biome].MinRoomsBetweenType = nil
                 EncounterData[biome].MinRunsSinceThanatosSpawn = nil
 
-                local length = math.random(5, 15)
+                local length = GetRngById(rngId):Random(5, 15)
                 local enemySet = {}
 
                 if string.match(biome, "MiniBoss") or string.match(biome, "Miniboss") then
@@ -620,23 +800,23 @@ function randomizeEnemies()
                     local randomEnemy
 
                     if string.match(biome, "MiniBoss") or string.match(biome, "Miniboss") then
-                        local randomIndex = math.random(#minibosses)
+                        local randomIndex = GetRngById(rngId):Random(#minibosses)
                         randomEnemy = minibosses[randomIndex]
 
                         while (randomEnemy == "CrawlerMiniBoss" or string.match(randomEnemy, "Rat")) and not string.startsWith(biome, "D_") do
-                            randomIndex = math.random(#minibosses)
+                            randomIndex = GetRngById(rngId):Random(#minibosses)
                             randomEnemy = minibosses[randomIndex]
                         end
 
                         assert(randomEnemy)
                     elseif not (string.match(biome, "Opening") or string.match(biome, "Tartarus") or string.match(biome, "Asphodel") or biome == "Generated" or string.match(biome, "Intro")) then
-                        local randomIndex = math.random(#enemiesCopy)
+                        local randomIndex = GetRngById(rngId):Random(#enemiesCopy)
                         randomEnemy = enemiesCopy[randomIndex]
 
                         assert(randomEnemy)
                         table.remove(enemiesCopy, randomIndex)
                     else
-                        local randomIndex = math.random(#enemiesCopy)
+                        local randomIndex = GetRngById(rngId):Random(#enemiesCopy)
                         randomEnemy = enemiesCopy[randomIndex]
 
                         local excludeType = "SuperElite"
@@ -651,7 +831,7 @@ function randomizeEnemies()
                                 enemiesCopy = DeepCopyTable(enemies)
                             end
 
-                            randomIndex = math.random(#enemiesCopy)
+                            randomIndex = GetRngById(rngId):Random(#enemiesCopy)
                             randomEnemy = enemiesCopy[randomIndex]
                             attempts = attempts + 1
                         end
@@ -660,7 +840,7 @@ function randomizeEnemies()
                         table.remove(enemiesCopy, randomIndex)
                     end
 
-                    ModUtil.Print("EnemySet: " .. biome .. " >> " .. randomEnemy)
+                    -- ModUtil.Print("EnemySet: " .. biome .. " >> " .. randomEnemy)
                     table.insert(enemySet, randomEnemy)
                 end
 
@@ -707,16 +887,21 @@ end
 function getRandomRarity()
     local rarities = { "Common", "Rare", "Epic", "Legendary", "Heroic" }
 
-    return rarities[math.random(rarities)]
+    assert(HadesRando.config.seed ~= nil, "Tried to get a random number while the seed was nil")
+    return rarities[GetRngById(rngId):Random(rarities)]
 end
 
 function setSeed()
-    if config.seed == nil then
-        math.randomseed(math.floor(GetTime({}) * 1000000))
-        config.seed = math.random(1, 9999999)
+    assert(rngId ~= nil)
+
+    if HadesRando.config.seed == nil then
+        RandomSetNextInitSeed({ Id = rngId, Seed = math.floor(GetTime({}) * 1000000) })
+        RandomSynchronize(0, rngId)
+        HadesRando.config.seed = GetRngById(rngId):Random(1, 9999999)
     end
 
-    math.randomseed(config.seed)
+    RandomSetNextInitSeed({ Id = rngId, Seed = HadesRando.config.seed })
+    RandomSynchronize(0, rngId)
 end
 
 function tableContains(table, value)
@@ -743,6 +928,16 @@ function mergeTables(table1, table2)
     return finalTable
 end
 
+function shuffleInPlace(table)
+    assert(HadesRando.config.seed ~= nil, "Tried to get a random number while the seed was nil")
+
+    for i = #table, 2, -1 do
+        local j = GetRngById(rngId):Random(i)
+        table[i], table[j] = table[j], table[i]
+    end
+end
+
+
 function string.startsWith(String,Start)
     return String ~= nil and Start ~= nil and string.sub(String,1,string.len(Start))==Start
 end
@@ -756,7 +951,7 @@ OnAnyLoad {
 function createSeedText()
     local runDepthCopy = DeepCopyTable(UIData.CurrentRunDepth.TextFormat)
     runDepthCopy.Color = Color.White
-    local text = seedText .. (config.seed or "None")
+    local text = seedText .. (HadesRando.config.seed or "None")
 
     if ScreenAnchors["HadesRandoSeed"] ~= nil then
         ModifyTextBox({ Id = ScreenAnchors["HadesRandoSeed"], Text = text, Color = runDepthCopy.Color })

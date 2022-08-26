@@ -1,3 +1,15 @@
+--[[
+Copyright 2022 Dannyj1
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+]]
+
+
+--[[
 ScreenData.SeedControl =
 {
     ItemStartX = ScreenWidth / 2 + 300,
@@ -18,7 +30,7 @@ function UseSeedController( usee, args )
     PlayInteractAnimation( usee.ObjectId )
     UseableOff({ Id = usee.ObjectId })
     StopStatusAnimation( usee )
-    local screen = OpenSeedControlScreen()
+    OpenSeedControlScreen()
     UseableOn({ Id = usee.ObjectId })
 end
 
@@ -114,7 +126,6 @@ function OpenSeedControlScreen( args )
     components.CloseButton.ControlHotkey = "Cancel"
 
     wait(0.1)
-    --TeleportCursor({ OffsetX = screen.ItemStartX - 30, OffsetY = screen.ItemStartY, ForceUseCheck = true })
 
     screen.KeepOpen = true
     thread( HandleWASDInput, screen )
@@ -166,7 +177,6 @@ end
 
 function UpdateDigitDisplay( screen )
     for digit, digitValue in ipairs( screen.Digits ) do
-        local digitKey = "DigitButton"..digit
         ModifyTextBox({ Id = screen.Components["DigitButton"..digit].Id, Text = digitValue })
     end
 end
@@ -180,9 +190,22 @@ function SeedControlScreenRandomize( screen, button )
     UpdateDigitDisplay( screen )
 end
 
+local function createSeedText()
+    local runDepthCopy = DeepCopyTable(UIData.CurrentRunDepth.TextFormat)
+    runDepthCopy.Color = Color.White
+    local text = "Set Seed: " .. (HadesRando.config.seed or "None")
+
+    if ScreenAnchors["HadesRandoSeed"] ~= nil then
+        ModifyTextBox({ Id = ScreenAnchors["HadesRandoSeed"], Text = text, Color = runDepthCopy.Color })
+    else
+        ScreenAnchors["HadesRandoSeed"] = CreateScreenObstacle({ Name = "BlankObstacle", X = 1905, Y = 124, Group = "Combat_Menu_Overlay" })
+        CreateTextBox(MergeTables(runDepthCopy, { Id = ScreenAnchors["HadesRandoSeed"], Text = text }))
+        ModifyTextBox({ Id = ScreenAnchors["HadesRandoSeed"] })
+    end
+end
+
 function CloseSeedControlScreen( screen, button )
     local newSeed = 0
-    local place = 1
     for digit, digitValue in ipairs( screen.Digits ) do
         newSeed = newSeed + (digitValue * math.pow(10, digit - 1))
     end
@@ -198,6 +221,8 @@ function CloseSeedControlScreen( screen, button )
     UnfreezePlayerUnit()
     screen.KeepOpen = false
     OnScreenClosed({ Flag = screen.Name })
+
+    createSeedText()
 end
 
 ModUtil.WrapBaseFunction("CreatePrimaryBacking", function ( baseFunc )
@@ -222,4 +247,4 @@ ModUtil.WrapBaseFunction("CreatePrimaryBacking", function ( baseFunc )
         Attach({ Id = components.RngSeedButton.Id, DestinationId = components.RngSeedButton, OffsetX = 500, OffsetY = 500 })
     end
     baseFunc()
-end, HadesRando)
+end, HadesRando)]]
