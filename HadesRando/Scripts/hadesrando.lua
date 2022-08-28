@@ -348,8 +348,8 @@ function DoUnlockRoomExits( run, room )
         local currentRoomName = CurrentRun.CurrentRoom.Name
 
         -- TODO: fix double intro room
-        if not (string.match(currentRoomName, "Boss") and not (string.match(currentRoomName, "MiniBoss")
-                or string.match(currentRoomName, "Miniboss") or string.match(currentRoomName, "PostBoss") or currentRoomName == "C_Boss01"))
+        if not roomCounter > #randomRooms and not currentRoomName == "C_Boss01" and (string.match(currentRoomName, "Boss") and not (string.match(currentRoomName, "MiniBoss")
+                or string.match(currentRoomName, "Miniboss") or string.match(currentRoomName, "PostBoss")))
                 and not string.match(currentRoomName, "Reprieve") and not string.startsWith(currentRoomName, "D_")
                 and not string.startsWith(currentRoomName, "E_") then
             local nextRoom = randomRooms[roomCounter]
@@ -469,6 +469,16 @@ function randomizeRooms()
     local championsIndex = roomAmount
     local erebusChance = GetRngById(rngId):Random(100)
     local charonFightChance = GetRngById(rngId):Random(100)
+    local npcRoom1 = table.remove(npcRooms, GetRngById(rngId):Random(#npcRooms))
+    local shopRoom1 = table.remove(shopRooms, GetRngById(rngId):Random(#shopRooms))
+    local shopRoom2 = table.remove(shopRooms, GetRngById(rngId):Random(#shopRooms))
+
+    for i = 1, #roomsCopy do
+        if roomsCopy[i] == npcRoom1 or roomsCopy[i] == shopRoom1 or roomsCopy[i] == shopRoom2 then
+            table.remove(roomsCopy, i)
+            break
+        end
+    end
 
     prepareRoomsets()
     insertRandomRoom(furiesIndex, bossPreRooms[1])
@@ -476,9 +486,9 @@ function randomizeRooms()
     insertRandomRoom(lernieIndex, bossPreRooms[2])
     insertRandomRoom(lernieIndex + 1, introRooms[2])
     insertRandomRoom(championsIndex, bossPreRooms[3])
-    insertRandomRoomAtFreeIndex(npcRooms[GetRngById(rngId):Random(#npcRooms)], roomAmount)
-    insertRandomRoomAtFreeIndex(shopRooms[GetRngById(rngId):Random(#shopRooms)], roomAmount)
-    insertRandomRoomAtFreeIndex(shopRooms[GetRngById(rngId):Random(#shopRooms)], roomAmount)
+    insertRandomRoomAtFreeIndex(npcRoom1, roomAmount)
+    insertRandomRoomAtFreeIndex(shopRoom1, roomAmount)
+    insertRandomRoomAtFreeIndex(shopRoom2, roomAmount)
 
     if erebusChance <= HadesRando.config.erebusEncounterChance then
         insertRandomRoomAtFreeIndex(erebusRooms[GetRngById(rngId):Random(#erebusRooms)], roomAmount)
