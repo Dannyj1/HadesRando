@@ -20,7 +20,7 @@ The following parts of the game can currently be randomized:
 5. Run the modimporter executable and you should be good to go! If you want to uninstall the mod, just remove the HadesRando folder and run ModImporter again.
 
 ### Configuration
-All features of this randomizer can be turned on or off by opening the Mods/HadesRando/Scripts/HadesRando.lua file.
+All features of this randomizer can be turned on or off by opening the Mods/HadesRando/Scripts/config.lua file.
 At the top of this file you should see `local config`. In here you can change anything from true to false or the other way around.
 For example, if you want to disable room randomization, you can set `randomizeRooms = true` to `randomizeRooms = false`
 
